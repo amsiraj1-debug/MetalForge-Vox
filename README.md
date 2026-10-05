@@ -42,3 +42,6 @@ User voice models are not included. Load a model you own or have permission to u
 RVC `.pth` checkpoints are PyTorch checkpoints, so a direct raw-`.pth` VST requires the RVC/PyTorch inference runtime. This project bundles that runtime with the plugin package rather than requiring the user to start it manually.
 
 Third-party components retain their original licenses. Review the RVC, iPlug2, Steinberg VST3 SDK, Python, PyTorch, Transformers, FAISS and model licenses before redistribution.
+
+
+CI status: GitHub Actions builds on every push to `main` and on manual dispatch.
