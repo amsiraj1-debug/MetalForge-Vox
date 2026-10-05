@@ -1,0 +1,89 @@
+name: Build MetalForge Vox VST3
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout builder repo
+        uses: actions/checkout@v4
+
+      - name: Enable long paths
+        shell: pwsh
+        run: git config --global core.longpaths true
+
+      - name: Clone pinned RVC source
+        shell: pwsh
+        run: |
+          git clone --recursive https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI.git upstream
+          git -C upstream checkout 81eed5e8f68b6bed1789f682fe78cdd324495afc
+          git -C upstream submodule update --init --recursive
+
+      - name: Apply MetalForge patches
+        shell: pwsh
+        run: |
+          & .\patches\metalforge.patch.ps1 -RvcRoot "$pwd\upstream"
+          & .\scripts\patch-workerclient.ps1 -RvcRoot "$pwd\upstream"
+
+      - name: Build upstream VST3
+        shell: pwsh
+        run: |
+          & "$pwd\upstream\RVCRealtimeVST\scripts\prepare-dependencies.ps1"
+          cmake -S "$pwd\upstream\RVCRealtimeVST" -B "$pwd\upstream\RVCRealtimeVST\build" -G "Visual Studio 17 2022" -A x64 -DRVC_BUILD_SMOKE_TEST=OFF
+          if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
+          cmake --build "$pwd\upstream\RVCRealtimeVST\build" --config Release --target RVCRealtime-vst3 --parallel
+          if ($LASTEXITCODE -ne 0) { throw "VST3 build failed" }
+
+      - name: Locate VST3
+        id: vst
+        shell: pwsh
+        run: |
+          $vst = Get-ChildItem "$pwd\upstream\RVCRealtimeVST\build" -Recurse -Directory -Filter "RVCRealtime.vst3" | Select-Object -First 1
+          if (-not $vst) { throw "RVCRealtime.vst3 not found" }
+          "path=$($vst.FullName)" >> $env:GITHUB_OUTPUT
+          Write-Host "VST3: $($vst.FullName)"
+
+      - name: Bundle RVC runtime inside VST3
+        shell: pwsh
+        run: |
+          & .\scripts\package-runtime.ps1 -RvcRoot "$pwd\upstream" -Vst3Path "${{ steps.vst.outputs.path }}"
+
+      - name: Verify bundle
+        shell: pwsh
+        run: |
+          $vst = "${{ steps.vst.outputs.path }}"
+          $checks = @(
+            (Join-Path $vst "Contents\x86_64-win\RVCRealtime.vst3"),
+            (Join-Path $vst "Contents\Resources\worker\rvc_worker.py"),
+            (Join-Path $vst "Contents\Resources\runtime\python.exe"),
+            (Join-Path $vst "Contents\Resources\rvc\infer\rtrvc.py"),
+            (Join-Path $vst "Contents\Resources\rvc\configs\config.py")
+          )
+          foreach ($item in $checks) { if (-not (Test-Path $item)) { throw "Missing $item" } }
+
+      - name: Package release ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          $stage = Join-Path $pwd "release\MetalForge-Vox-Windows-x64"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item -Recurse -Force "${{ steps.vst.outputs.path }}" (Join-Path $stage "MetalForge Vox.vst3")
+          Copy-Item README.md (Join-Path $stage "README.md")
+          Compress-Archive -Path "$stage\*" -DestinationPath "$pwd\release\MetalForge-Vox-Windows-x64-VST3.zip" -CompressionLevel Optimal
+
+      - name: Upload VST3 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MetalForge-Vox-Windows-x64-VST3
+          path: release/MetalForge-Vox-Windows-x64-VST3.zip
+          if-no-files-found: error
+          compression-level: 0
