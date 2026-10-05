@@ -36,6 +36,31 @@ $src = $src.Replace('IRECT(96, 266, 750, 290), "Select RVC root and Python runti
                     'IRECT(96, 226, 750, 250), "Bundled RVC runtime - select .pth and optional .index"')
 $src = $src.Replace('const float gridLeft = 30.f, gridTop = 300.f;', 'const float gridLeft = 30.f, gridTop = 270.f;')
 $src = $src.Replace('const float bottomY = 566.f, bottomHeight = 44.f;', 'const float bottomY = 536.f, bottomHeight = 44.f;')
+
+
+# Make the bundled runtime transparent to the user: validate only model/index.
+$validateStart = $src.IndexOf("bool RVCRealtime::ValidateConfiguration(std::string& error) const")
+$loadStart = $src.IndexOf("void RVCRealtime::LoadUserConfiguration()", $validateStart)
+if ($validateStart -lt 0 -or $loadStart -lt 0) { throw "ValidateConfiguration block not found" }
+$replacement = @'
+bool RVCRealtime::ValidateConfiguration(std::string& error) const
+{
+  std::string model, index;
+  {
+    std::lock_guard<std::mutex> lock(mStateMutex);
+    model = mModelPath.Get();
+    index = mIndexPath.Get();
+  }
+  if (model.empty()) { error = "Select an RVC .pth model."; return false; }
+  if (!PathIsFile(model)) { error = "Selected model file does not exist."; return false; }
+  if (!index.empty() && !PathIsFile(index)) { error = "Selected index file does not exist."; return false; }
+  error.clear();
+  return true;
+}
+
+'@
+$src = $src.Substring(0,$validateStart) + $replacement + $src.Substring($loadStart)
+
 Set-Content -Path $cpp -Value $src -Encoding UTF8
 
 Write-Host "MetalForge Vox patch applied."
