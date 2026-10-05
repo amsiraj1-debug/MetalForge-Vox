@@ -1,5 +1,6 @@
-$ErrorActionPreference = "Stop"
 param([Parameter(Mandatory=$true)][string]$RvcRoot)
+
+$ErrorActionPreference = "Stop"
 
 $path = Join-Path $RvcRoot "RVCRealtimeVST\src\WorkerClient.cpp"
 $src = Get-Content $path -Raw
