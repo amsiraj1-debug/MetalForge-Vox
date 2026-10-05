@@ -1,8 +1,8 @@
-$ErrorActionPreference = "Stop"
-
 param(
   [Parameter(Mandatory=$true)][string]$RvcRoot
 )
+
+$ErrorActionPreference = "Stop"
 
 $vst = Join-Path $RvcRoot "RVCRealtimeVST"
 $config = Join-Path $vst "config.h"
