@@ -1,8 +1,9 @@
-$ErrorActionPreference = "Stop"
 param(
   [Parameter(Mandatory=$true)][string]$RvcRoot,
   [Parameter(Mandatory=$true)][string]$Vst3Path
 )
+
+$ErrorActionPreference = "Stop"
 
 $resources = Join-Path $Vst3Path "Contents\Resources"
 $runtimeDir = Join-Path $resources "runtime"
