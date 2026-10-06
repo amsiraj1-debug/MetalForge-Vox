@@ -1,47 +1,32 @@
-# MetalForge Vox
+# VocalMorph
 
-Self-contained Windows VST3 builder for RVC voice conversion.
+Original Windows vocal studio: Next.js web app, asynchronous FastAPI backend, reusable C++ DSP, and JUCE VST3 with a bundled offline PyTorch/RVC worker.
 
-## What this repository does
+**Development build, not a production-certified voice converter.** No voice or base-model weights are distributed. Install a licensed model package before using neural conversion. DSP styles work immediately. See docs/STATUS.md for verified functionality and limitations.
 
-This repository builds a Windows x64 VST3 based on the official RVC Realtime VST architecture, but packages the RVC source/runtime with the plugin so the user does not have to manually start RVC WebUI, OpenVoice, or a separate Python server.
+## Web studio
 
-The plugin supports:
+Requires Node 22, Python 3.12, CMake 3.24+, Visual Studio 2022 C++ tools on Windows.
 
-- Direct RVC `.pth` model selection
-- Optional `.index` selection
-- RMVPE / FCPE / PM F0 methods
-- Pitch, formant, retrieval/index rate, RMS mix, gate, block, crossfade, context, dry/wet, and output controls
-- Automatic launch of the bundled worker
-- Shared-memory audio transport between the VST and the bundled inference worker
-- Windows VST3 build through GitHub Actions
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DVM_BUILD_PLUGIN=OFF
+cmake --build build --config Release --parallel
+python -m pip install -r apps/api/requirements-ai.txt
+python tools/bootstrap.py
+$env:PYTHONPATH = "$pwd/apps/api"
+python -m uvicorn vocalmorph.main:app --host 127.0.0.1 --port 8000
+```
 
-## Build
+In another terminal:
 
-Open the **Actions** tab and run **Build MetalForge Vox VST3**.
+```powershell
+cd apps/web
+npm ci
+npm run dev
+```
 
-The workflow pins the upstream RVC project to:
+Open http://localhost:3000. API binding is loopback only; this development API has no authentication and is not intended for public internet exposure.
 
-`81eed5e8f68b6bed1789f682fe78cdd324495afc`
+## VST3
 
-It builds the VST3, patches it for the MetalForge Vox name and bundled-runtime defaults, packages a portable Python runtime plus RVC inference source, and uploads a ZIP artifact.
-
-## Runtime profiles
-
-The default workflow packages the **CPU** runtime because it is the most portable. A CUDA runtime is much larger and should be added as a separate release profile once the CPU artifact is building reliably.
-
-## Model files
-
-User voice models are not included. Load a model you own or have permission to use:
-
-- `Voice.pth`
-- optional `Voice.index`
-
-## Important
-
-RVC `.pth` checkpoints are PyTorch checkpoints, so a direct raw-`.pth` VST requires the RVC/PyTorch inference runtime. This project bundles that runtime with the plugin package rather than requiring the user to start it manually.
-
-Third-party components retain their original licenses. Review the RVC, iPlug2, Steinberg VST3 SDK, Python, PyTorch, Transformers, FAISS and model licenses before redistribution.
-
-
-CI status: GitHub Actions builds on every push to `main` and on manual dispatch.
+The `VocalMorph Windows` GitHub Actions workflow builds with Visual Studio 2022, tests the plugin and core, bundles the inference runtime, and uploads `VocalMorph-Windows-x64-VST3`. Version tags create releases after all tests pass. See [installation](docs/INSTALL.md), [model packages](docs/MODELS.md), [architecture](docs/ARCHITECTURE.md), and [third-party licenses](docs/THIRD_PARTY.md).

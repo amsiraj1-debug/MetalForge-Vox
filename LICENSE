@@ -1,0 +1,12 @@
+VocalMorph original source code
+Copyright (c) 2026 VocalMorph contributors
+SPDX-License-Identifier: AGPL-3.0-only
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License version 3 as published by
+the Free Software Foundation. This program is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+PURPOSE. See https://www.gnu.org/licenses/agpl-3.0.html for the full license.
+
+Third-party components retain their own licenses; see docs/THIRD_PARTY.md.
+No voice weights or celebrity voice likenesses are included.

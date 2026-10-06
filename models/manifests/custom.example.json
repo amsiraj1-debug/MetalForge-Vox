@@ -1,0 +1,20 @@
+{
+  "id": "my-authorized-voice",
+  "name": "My Voice",
+  "version": "1.0.0",
+  "architecture": "rvc-v2",
+  "category": "Custom",
+  "tags": ["custom", "monophonic"],
+  "sample_rate": 40000,
+  "pitch_range": [65, 1100],
+  "license": "REPLACE WITH YOUR MODEL LICENSE",
+  "consent": false,
+  "description": "Replace this with model provenance and training information.",
+  "files": {
+    "model.pth": {"license": "REPLACE WITH VOICE MODEL LICENSE", "sha256": ""},
+    "rmvpe.pt": {"license": "REPLACE WITH PITCH MODEL LICENSE", "sha256": ""},
+    "hubert/config.json": {"license": "REPLACE WITH ENCODER LICENSE", "sha256": ""},
+    "hubert/preprocessor_config.json": {"license": "REPLACE WITH ENCODER LICENSE", "sha256": ""},
+    "hubert/model.safetensors": {"license": "REPLACE WITH ENCODER WEIGHTS LICENSE", "sha256": ""}
+  }
+}
