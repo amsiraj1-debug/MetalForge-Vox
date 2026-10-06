@@ -1,3 +1,37 @@
 #include "Processor.h"
-#include <stdexcept>
-int main(){juce::ScopedJuceInitialiser_GUI gui;VocalMorphProcessor p;p.prepareToPlay(48000,512);juce::AudioBuffer<float> b(2,512);b.clear();juce::MidiBuffer midi;p.processBlock(b,midi);if(b.getMagnitude(0,512)!=0)return 1;auto* mix=p.state.getParameter("mix");mix->setValueNotifyingHost(.37f);juce::MemoryBlock data;p.getStateInformation(data);VocalMorphProcessor q;q.setStateInformation(data.getData(),static_cast<int>(data.getSize()));if(std::abs(q.state.getRawParameterValue("mix")->load()-.37f)>.001f)return 2;q.prepareToPlay(96000,128);q.processBlock(b,midi);q.setNeuralMode(true);if(q.getLatencySamples()!=61440)return 3;return 0;}
+#include <memory>
+#include <cmath>
+
+int main()
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    auto p = std::make_unique<VocalMorphProcessor>();
+    p->prepareToPlay(48000.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    juce::MidiBuffer midi;
+    p->processBlock(buffer, midi);
+    if (buffer.getMagnitude(0, 512) != 0.0f)
+        return 1;
+
+    auto* mix = p->state.getParameter("mix");
+    mix->setValueNotifyingHost(0.37f);
+
+    juce::MemoryBlock state;
+    p->getStateInformation(state);
+
+    auto q = std::make_unique<VocalMorphProcessor>();
+    q->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    if (std::abs(q->state.getRawParameterValue("mix")->load() - 0.37f) > 0.001f)
+        return 2;
+
+    q->prepareToPlay(96000.0, 128);
+    q->processBlock(buffer, midi);
+    q->setNeuralMode(true);
+    if (q->getLatencySamples() != 61440)
+        return 3;
+
+    return 0;
+}
