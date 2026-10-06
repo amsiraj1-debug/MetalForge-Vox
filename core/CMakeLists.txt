@@ -1,0 +1,5 @@
+add_library(VocalMorphCore STATIC src/Dsp.cpp)
+target_include_directories(VocalMorphCore PUBLIC include)
+add_library(vocalmorph_dsp SHARED src/c_api.cpp)
+target_link_libraries(vocalmorph_dsp PRIVATE VocalMorphCore)
+install(TARGETS vocalmorph_dsp RUNTIME DESTINATION runtime LIBRARY DESTINATION runtime)

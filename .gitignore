@@ -1,0 +1,17 @@
+build*/
+node_modules/
+.next/
+out/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.vocalmorph/
+release/
+third_party/
+*.pth
+*.pt
+*.onnx
+*.safetensors
+.env*
+*.tsbuildinfo

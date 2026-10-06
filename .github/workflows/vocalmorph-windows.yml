@@ -1,0 +1,112 @@
+name: VocalMorph Windows
+on:
+  push:
+    branches: [vocalmorph, main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vocalmorph-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    runs-on: windows-2022
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable long paths
+        run: git config --global core.longpaths true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Configure Visual Studio 2022 x64
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DVM_BUILD_PLUGIN=ON -DBUILD_TESTING=ON
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
+      - name: Build Release
+        run: cmake --build build --config Release --parallel 4
+      - name: Test plugin construction, state and core
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Build and test Debug core
+        shell: pwsh
+        run: |
+          cmake --build build --config Debug --target core_tests --parallel 4
+          if ($LASTEXITCODE -ne 0) { throw 'Debug build failed' }
+          ctest --test-dir build -C Debug -R '^core$' --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw 'Debug tests failed' }
+      - name: Install plugin
+        run: cmake --install build --config Release --prefix release/stage
+      - name: Bundle offline inference runtime
+        shell: pwsh
+        run: ./tools/bundle-runtime.ps1 -Stage "$pwd/release/stage" -Build "$pwd/build"
+      - name: Validate and package VST3
+        shell: pwsh
+        run: |
+          $bundle = 'release/stage/VocalMorph.vst3'
+          $required = @('Contents/x86_64-win/VocalMorph.vst3', 'Contents/Resources/moduleinfo.json', 'Contents/Resources/runtime/python.exe', 'Contents/Resources/worker/worker.py')
+          foreach ($item in $required) { if (!(Test-Path "$bundle/$item")) { throw "Missing $item" } }
+          Copy-Item docs/THIRD_PARTY.md release/stage/
+          Compress-Archive -Path release/stage/* -DestinationPath release/VocalMorph-Windows-x64.zip
+          Get-FileHash release/VocalMorph-Windows-x64.zip -Algorithm SHA256 | Format-List | Out-File release/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VocalMorph-Windows-x64-VST3
+          path: |
+            release/VocalMorph-Windows-x64.zip
+            release/SHA256.txt
+          if-no-files-found: error
+          compression-level: 0
+  web-api:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build core for API
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DVM_BUILD_PLUGIN=OFF
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
+          cmake --build build --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Core build failed' }
+      - name: API tests
+        shell: pwsh
+        run: |
+          python -m pip install -r apps/api/requirements.txt pytest==8.3.5 httpx==0.28.1
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency install failed' }
+          $env:PYTHONPATH = "$pwd/apps/api"
+          $env:VOCALMORPH_DSP = "$pwd/build/core/Release/vocalmorph_dsp.dll"
+          python -m pytest tests/test_api.py -q
+          if ($LASTEXITCODE -ne 0) { throw 'API tests failed' }
+      - name: Web production build
+        working-directory: apps/web
+        shell: pwsh
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'Web build failed' }
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [native, web-api]
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: VocalMorph-Windows-x64-VST3
+          path: release
+      - name: Publish tagged release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create '${{ github.ref_name }}' release/* --repo '${{ github.repository }}' --title 'VocalMorph ${{ github.ref_name }}' --generate-notes

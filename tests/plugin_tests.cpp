@@ -1,0 +1,3 @@
+#include "Processor.h"
+#include <stdexcept>
+int main(){juce::ScopedJuceInitialiser_GUI gui;VocalMorphProcessor p;p.prepareToPlay(48000,512);juce::AudioBuffer<float> b(2,512);b.clear();juce::MidiBuffer midi;p.processBlock(b,midi);if(b.getMagnitude(0,512)!=0)return 1;auto* mix=p.state.getParameter("mix");mix->setValueNotifyingHost(.37f);juce::MemoryBlock data;p.getStateInformation(data);VocalMorphProcessor q;q.setStateInformation(data.getData(),static_cast<int>(data.getSize()));if(std::abs(q.state.getRawParameterValue("mix")->load()-.37f)>.001f)return 2;q.prepareToPlay(96000,128);q.processBlock(b,midi);q.setNeuralMode(true);if(q.getLatencySamples()!=61440)return 3;return 0;}
