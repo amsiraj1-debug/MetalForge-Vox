@@ -6,7 +6,7 @@ import soundfile as sf
 import pytest
 from fastapi.testclient import TestClient
 from vocalmorph.main import app,ROOT
-from vocalmorph.engine import parameters,cache_key,DEFAULTS,dsp
+from vocalmorph.engine import parameters,cache_key,DEFAULTS,dsp,resolve_model_source
 from vocalmorph.models import safe_path,install_zip,validate
 
 def test_cache_hash():
@@ -29,6 +29,13 @@ def test_traversal_and_zip_bomb(tmp_path):
 def test_missing_manifest_fields(tmp_path):
  (tmp_path/'manifest.json').write_text('{}')
  with pytest.raises(ValueError):validate(tmp_path)
+
+def test_direct_pth_resolution_without_manifest(tmp_path):
+ p=tmp_path/'voice.pth';p.write_bytes(b'checkpoint-placeholder')
+ model,root,manifest=resolve_model_source(p)
+ assert model==p and root==tmp_path and manifest is None
+ model2,root2,manifest2=resolve_model_source(tmp_path)
+ assert model2==p and root2==tmp_path and manifest2 is None
 
 def test_native_dsp():
  x=np.sin(np.arange(4800)*2*np.pi*220/48000).astype('float32')*.2
