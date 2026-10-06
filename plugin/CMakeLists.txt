@@ -7,6 +7,6 @@ install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/VocalMorph_artefacts/$<CONFIG>/VS
 if(BUILD_TESTING)
  add_executable(plugin_tests ../tests/plugin_tests.cpp)
  target_link_libraries(plugin_tests PRIVATE VocalMorph)
- target_include_directories(plugin_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/VocalMorph_artefacts/JuceLibraryCode" .)
+ target_include_directories(plugin_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/VocalMorph_artefacts/JuceLibraryCode" "${juce_SOURCE_DIR}/modules" .)
  add_test(NAME plugin COMMAND plugin_tests)
 endif()
