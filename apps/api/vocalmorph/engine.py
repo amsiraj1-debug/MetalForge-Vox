@@ -37,9 +37,34 @@ def dsp(x,sr,p):
  if rc:raise RuntimeError("Native DSP rejected input")
  return audio
 
+def resolve_model_source(source):
+ p=Path(source)
+ if p.is_file():
+  if p.suffix.lower()==".pth":return p,p.parent,None
+  if p.name.lower()=="manifest.json":return p.parent/"model.pth",p.parent,p
+  raise ValueError("Choose an RVC .pth file")
+ if not p.is_dir():raise ValueError("Model path does not exist")
+ manifest=p/"manifest.json"
+ if manifest.is_file():return p/"model.pth",p,manifest
+ checkpoints=sorted(p.glob("*.pth"))
+ if len(checkpoints)==1:return checkpoints[0],p,None
+ if not checkpoints:raise ValueError("No RVC .pth model found")
+ raise ValueError("Multiple .pth files found; choose the model file directly")
+
+def resolve_support_assets(model_dir):
+ candidates=[]
+ env=os.environ.get("VOCALMORPH_ASSETS","")
+ if env:candidates.append(Path(env))
+ candidates += [Path(model_dir),Path(__file__).resolve().parents[2]/"assets"]
+ needed=("rmvpe.pt","hubert/config.json","hubert/preprocessor_config.json","hubert/model.safetensors")
+ for root in candidates:
+  if all((root/name).is_file() for name in needed):return root
+ raise ValueError("RVC model detected, but RMVPE/HuBERT support assets are missing. Put rmvpe.pt and hubert/{config.json,preprocessor_config.json,model.safetensors} beside the .pth, or install them in VocalMorph Resources/assets.")
+
 class RvcEngine:
  def __init__(self,root):
-  self.root=Path(root);self.manifest=validate(root)
+  self.model_path,self.root,manifest_path=resolve_model_source(root)
+  self.manifest=validate(self.root) if manifest_path is not None else None
   os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"]="1"
   os.environ["HF_HUB_OFFLINE"]="1"
   upstream=Path(os.environ.get("VOCALMORPH_RVC",Path(__file__).resolve().parents[3]/"third_party/rvc"))
@@ -52,23 +77,29 @@ class RvcEngine:
   from transformers import AutoFeatureExtractor
   torch.set_num_threads(max(1,min(4,(os.cpu_count() or 2)//2)))
   self.torch=torch
-  c=torch.load(self.root/"model.pth",map_location="cpu",weights_only=True)
+  c=torch.load(self.model_path,map_location="cpu",weights_only=True)
   if not isinstance(c,dict) or not isinstance(c.get("weight"),dict) or len(c.get("config",[]))!=18:raise ValueError("Not a supported RVC inference checkpoint")
   self.version=c.get("version","v1")
-  if "rvc-"+self.version!=self.manifest["architecture"] or c.get("f0",1)!=1:raise ValueError("Checkpoint architecture differs from manifest, or lacks F0 support")
+  if self.version not in ("v1","v2"):raise ValueError("Only RVC v1/v2 checkpoints are supported")
+  if c.get("f0",1)!=1:raise ValueError("RVC checkpoint must include F0 support")
+  if self.manifest is not None and "rvc-"+self.version!=self.manifest["architecture"]:raise ValueError("Checkpoint architecture differs from manifest")
   cfg=list(c["config"])
   if any(not isinstance(v,(int,float,str,list,tuple)) for v in cfg):raise ValueError("Invalid checkpoint configuration")
   if cfg[2]>512 or cfg[3]>1024 or cfg[4]>4096 or cfg[6]>24 or cfg[15]>1000:raise ValueError("Checkpoint exceeds supported architecture size")
   cfg[-3]=c["weight"]["emb_g.weight"].shape[0]
-  if cfg[-3]>1000 or cfg[-1]!=self.manifest["sample_rate"]:raise ValueError("Invalid speaker count or sample rate")
-  self.sr=int(cfg[-1]);ctor=SynthesizerTrnMs768NSFsid if self.version=="v2" else SynthesizerTrnMs256NSFsid
+  if cfg[-3]>1000:raise ValueError("Invalid speaker count")
+  self.sr=int(cfg[-1])
+  if self.sr not in (32000,40000,48000):raise ValueError("Unsupported RVC sample rate")
+  if self.manifest is not None and self.sr!=self.manifest["sample_rate"]:raise ValueError("Checkpoint sample rate differs from manifest")
+  ctor=SynthesizerTrnMs768NSFsid if self.version=="v2" else SynthesizerTrnMs256NSFsid
   self.net=ctor(*cfg,is_half=False);del self.net.enc_q
   result=self.net.load_state_dict(c["weight"],strict=False)
   if result.missing_keys:raise ValueError("Checkpoint has missing inference tensors")
   self.net=self.net.float().eval();self.net.remove_weight_norm()
-  self.encoder=HubertModelWithFinalProj.from_pretrained(str(self.root/"hubert"),local_files_only=True,use_safetensors=True,attn_implementation="eager").float().eval()
-  self.normalize=AutoFeatureExtractor.from_pretrained(str(self.root/"hubert"),local_files_only=True).do_normalize
-  self.pitch=RMVPE(str(self.root/"rmvpe.pt"),is_half=False,device="cpu")
+  assets=resolve_support_assets(self.root)
+  self.encoder=HubertModelWithFinalProj.from_pretrained(str(assets/"hubert"),local_files_only=True,use_safetensors=True,attn_implementation="eager").float().eval()
+  self.normalize=AutoFeatureExtractor.from_pretrained(str(assets/"hubert"),local_files_only=True).do_normalize
+  self.pitch=RMVPE(str(assets/"rmvpe.pt"),is_half=False,device="cpu")
 
  def convert(self,x,sr,p):
   torch=self.torch;p=parameters(p);x16=resample(x,sr,16000)
