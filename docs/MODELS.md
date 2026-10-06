@@ -1,11 +1,24 @@
 # Custom .pth models and RMVPE
 
-Supported: RVC v1 (256 features) and v2 (768 features), F0-enabled inference checkpoints, 32/40/48 kHz, speaker 0. RMVPE estimates pitch; HuBERT/ContentVec encodes content; the .pth synthesizer converts the voice. Training checkpoints, arbitrary PyTorch architectures, non-F0 checkpoints and external Python code are rejected.
+VocalMorph VST3 can load an authorized RVC v1/v2 F0 checkpoint directly from a `.pth` file. A `manifest.json` is **not required** for direct VST model loading.
 
-Create a directory with `manifest.json`, `model.pth`, `rmvpe.pt`, and `hubert/{config.json,preprocessor_config.json,model.safetensors}`. HuBERT must be a compatible locally converted RVC ContentVec/HuBERT checkpoint; v1 needs its trained final projection. Do not substitute an unrelated encoder.
+Supported checkpoints: RVC v1 (256 features) and v2 (768 features), F0-enabled inference checkpoints, 32/40/48 kHz, speaker 0. Training checkpoints, arbitrary PyTorch architectures, and non-F0 checkpoints are rejected.
 
-Copy models/manifests/custom.example.json to manifest.json, fill the actual metadata and each asset's license, and run `python tools/package_model.py YOUR_FOLDER --output my-voice.zip`. The helper fills checksums. Upload the ZIP in the web Model Manager. In the VST3 choose the .pth or manifest in the **unpacked** directory. No background model downloads occur.
+The voice checkpoint is only one part of inference. VocalMorph also needs RMVPE and a compatible local HuBERT/ContentVec encoder. Put these assets either beside the selected `.pth`:
 
-The loader forces PyTorch weights-only deserialization, requires safetensors for the encoder, checks paths, architecture, file hashes and resource limits, and loads weights in a separate process. These measures reduce risk; they are not a sandbox for malicious native-library exploits. Only install trusted, authorized packages.
+```
+MyVoice.pth
+rmvpe.pt
+hubert/
+  config.json
+  preprocessor_config.json
+  model.safetensors
+```
 
-No licensed model weights were supplied for this build. Neural speech quality, base-model compatibility and live CPU performance require validation with actual authorized packages. The tests do not claim to evaluate voice similarity.
+or install the common support assets in the plugin's `Contents/Resources/assets` directory. The same RMVPE/HuBERT assets can then be reused by multiple `.pth` voice models.
+
+When a `.pth` is selected, VocalMorph safely inspects the checkpoint with PyTorch `weights_only=True`, detects RVC v1/v2 and the checkpoint sample rate, validates architecture/resource limits, then loads it in the separate worker process. The model does not need JSON metadata.
+
+The web Model Manager may still use the stricter packaged-model format for catalog/import workflows, where provenance, checksums, consent and licensing metadata are useful. That package format is separate from direct VST `.pth` loading.
+
+Only use voice checkpoints and support weights that you have permission to use.
