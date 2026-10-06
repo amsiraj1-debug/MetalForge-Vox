@@ -3,10 +3,10 @@
 #include <vector>
 namespace {
 juce::File resources(){HMODULE module=nullptr;GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(&resources),&module);wchar_t path[32768]{};GetModuleFileNameW(module,path,32768);return juce::File(juce::String(path)).getParentDirectory().getParentDirectory().getChildFile("Resources");}
-class Process {
+class WorkerProcess {
  HANDLE process=nullptr,readPipe=nullptr,writePipe=nullptr;
 public:
- ~Process(){close();}
+ ~WorkerProcess(){close();}
  void close(){if(process){TerminateProcess(process,0);WaitForSingleObject(process,3000);CloseHandle(process);process=nullptr;}if(readPipe){CloseHandle(readPipe);readPipe=nullptr;}if(writePipe){CloseHandle(writePipe);writePipe=nullptr;}}
  bool start(){close();auto root=resources();auto python=root.getChildFile("runtime/python.exe");auto script=root.getChildFile("worker/worker.py");if(!python.existsAsFile()||!script.existsAsFile())return false;
  SECURITY_ATTRIBUTES sa{sizeof(SECURITY_ATTRIBUTES),nullptr,TRUE};HANDLE inRead=nullptr,outWrite=nullptr;
@@ -31,7 +31,7 @@ NeuralWorker::~NeuralWorker(){stopping=true;if(thread.joinable())thread.join();}
 void NeuralWorker::setStatus(juce::String s){std::lock_guard<std::mutex> l(statusMutex);message=std::move(s);}
 juce::String NeuralWorker::status(){std::lock_guard<std::mutex> l(statusMutex);return message;}
 void NeuralWorker::select(const juce::File& file,double sr){std::lock_guard<std::mutex> l(configMutex);pendingPath=file.getFullPathName();rate=sr;changed=true;loaded=false;++generation;}
-void NeuralWorker::run(){Process process;double sr=48000;std::vector<vm::TimedSample> chunk;std::vector<float> history,audio,result;juce::var reply;uint32_t active=0;size_t frames=7680;
+void NeuralWorker::run(){WorkerProcess process;double sr=48000;std::vector<vm::TimedSample> chunk;std::vector<float> history,audio,result;juce::var reply;uint32_t active=0;size_t frames=7680;
  while(!stopping){juce::String path;bool reload=false;{std::lock_guard<std::mutex> l(configMutex);if(changed){reload=true;changed=false;path=pendingPath;sr=rate;active=generation.load();}}
  if(reload){loaded=false;chunk.clear();history.clear();process.close();frames=static_cast<size_t>(std::max(128.,sr*.16));if(path.isEmpty()){setStatus("DSP monitoring");continue;}setStatus("Validating and loading model…");if(!process.start()){setStatus("Bundled runtime missing. Install the full release package.");continue;}
  auto* h=new juce::DynamicObject();h->setProperty("op","load");h->setProperty("path",path);if(!process.request(juce::var(h),{},reply,result,stopping)||!static_cast<bool>(reply.getProperty("ok",false))){setStatus("Model load failed: "+reply.getProperty("error","worker unavailable").toString());process.close();continue;}loaded=true;setStatus("Neural model ready · RMVPE · CPU");}
