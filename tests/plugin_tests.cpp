@@ -33,5 +33,19 @@ int main()
     if (q->getLatencySamples() != 61440)
         return 3;
 
+    // Neural mode must never leak the original/dry voice while converted audio is unavailable.
+    auto wetOnly = std::make_unique<VocalMorphProcessor>();
+    wetOnly->prepareToPlay(48000.0, 32768);
+    wetOnly->setNeuralMode(true);
+    juce::AudioBuffer<float> voice(2, 32768);
+    voice.clear();
+    for (int c = 0; c < voice.getNumChannels(); ++c)
+        for (int n = 0; n < voice.getNumSamples(); ++n)
+            voice.setSample(c, n, 0.25f);
+    wetOnly->processBlock(voice, midi);
+    if (voice.getMagnitude(0, voice.getNumSamples()) != 0.0f ||
+        voice.getMagnitude(1, voice.getNumSamples()) != 0.0f)
+        return 4;
+
     return 0;
 }
