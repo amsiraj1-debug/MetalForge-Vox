@@ -46,7 +46,7 @@ jobs:
         shell: pwsh
         run: |
           $bundle = 'release/stage/VocalMorph.vst3'
-          $required = @('Contents/x86_64-win/VocalMorph.vst3', 'Contents/Resources/moduleinfo.json', 'Contents/Resources/runtime/python.exe', 'Contents/Resources/worker/worker.py')
+          $required = @('Contents/x86_64-win/VocalMorph.vst3', 'Contents/Resources/moduleinfo.json', 'Contents/Resources/runtime/python.exe', 'Contents/Resources/worker/worker.py', 'Contents/Resources/assets/rmvpe/rmvpe.pt', 'Contents/Resources/assets/hubert_base/config.json', 'Contents/Resources/assets/hubert_base/preprocessor_config.json', 'Contents/Resources/assets/hubert_base/pytorch_model.bin')
           foreach ($item in $required) { if (!(Test-Path "$bundle/$item")) { throw "Missing $item" } }
           Copy-Item docs/THIRD_PARTY.md release/stage/
           Compress-Archive -Path release/stage/* -DestinationPath release/VocalMorph-Windows-x64.zip
