@@ -55,16 +55,22 @@ def resolve_support_assets(model_dir):
  candidates=[]
  env=os.environ.get("VOCALMORPH_ASSETS","")
  if env:candidates.append(Path(env))
- candidates += [Path(model_dir),Path(__file__).resolve().parents[2]/"assets"]
- needed=("rmvpe.pt","hubert/config.json","hubert/preprocessor_config.json","hubert/model.safetensors")
+ model_dir=Path(model_dir)
+ candidates += [model_dir,model_dir/"assets",Path(__file__).resolve().parents[2]/"assets"]
  for root in candidates:
-  if all((root/name).is_file() for name in needed):return root
- raise ValueError("RVC model detected, but RMVPE/HuBERT support assets are missing. Put rmvpe.pt and hubert/{config.json,preprocessor_config.json,model.safetensors} beside the .pth, or install them in VocalMorph Resources/assets.")
+  layouts=((root/"rmvpe"/"rmvpe.pt",root/"hubert_base"),(root/"rmvpe.pt",root/"hubert"))
+  for rmvpe,hubert in layouts:
+   weight=hubert/"model.safetensors"
+   if not weight.is_file():weight=hubert/"pytorch_model.bin"
+   if rmvpe.is_file() and (hubert/"config.json").is_file() and (hubert/"preprocessor_config.json").is_file() and weight.is_file():
+    return rmvpe,hubert
+ raise ValueError("RVC model detected, but the RMVPE/HuBERT support bundle is missing. Reinstall the full VocalMorph package; expected Resources/assets/rmvpe/rmvpe.pt and Resources/assets/hubert_base/.")
 
 class RvcEngine:
  def __init__(self,root):
   self.model_path,self.root,manifest_path=resolve_model_source(root)
   self.manifest=validate(self.root) if manifest_path is not None else None
+  self.rmvpe_path,self.hubert_dir=resolve_support_assets(self.root)
   os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"]="1"
   os.environ["HF_HUB_OFFLINE"]="1"
   upstream=Path(os.environ.get("VOCALMORPH_RVC",Path(__file__).resolve().parents[3]/"third_party/rvc"))
@@ -96,10 +102,10 @@ class RvcEngine:
   result=self.net.load_state_dict(c["weight"],strict=False)
   if result.missing_keys:raise ValueError("Checkpoint has missing inference tensors")
   self.net=self.net.float().eval();self.net.remove_weight_norm()
-  assets=resolve_support_assets(self.root)
-  self.encoder=HubertModelWithFinalProj.from_pretrained(str(assets/"hubert"),local_files_only=True,use_safetensors=True,attn_implementation="eager").float().eval()
-  self.normalize=AutoFeatureExtractor.from_pretrained(str(assets/"hubert"),local_files_only=True).do_normalize
-  self.pitch=RMVPE(str(assets/"rmvpe.pt"),is_half=False,device="cpu")
+  use_safetensors=(self.hubert_dir/"model.safetensors").is_file()
+  self.encoder=HubertModelWithFinalProj.from_pretrained(str(self.hubert_dir),local_files_only=True,use_safetensors=use_safetensors,attn_implementation="eager").float().eval()
+  self.normalize=AutoFeatureExtractor.from_pretrained(str(self.hubert_dir),local_files_only=True).do_normalize
+  self.pitch=RMVPE(str(self.rmvpe_path),is_half=False,device="cpu")
 
  def convert(self,x,sr,p):
   torch=self.torch;p=parameters(p);x16=resample(x,sr,16000)
