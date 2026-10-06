@@ -6,7 +6,7 @@ import soundfile as sf
 import pytest
 from fastapi.testclient import TestClient
 from vocalmorph.main import app,ROOT
-from vocalmorph.engine import parameters,cache_key,DEFAULTS,dsp,resolve_model_source
+from vocalmorph.engine import parameters,cache_key,DEFAULTS,dsp,resolve_model_source,resolve_support_assets
 from vocalmorph.models import safe_path,install_zip,validate
 
 def test_cache_hash():
@@ -36,6 +36,16 @@ def test_direct_pth_resolution_without_manifest(tmp_path):
  assert model==p and root==tmp_path and manifest is None
  model2,root2,manifest2=resolve_model_source(tmp_path)
  assert model2==p and root2==tmp_path and manifest2 is None
+
+def test_official_rvc_support_asset_layout(tmp_path):
+ assets=tmp_path/'assets'
+ rmvpe=assets/'rmvpe'/'rmvpe.pt';rmvpe.parent.mkdir(parents=True);rmvpe.write_bytes(b'rmvpe')
+ hubert=assets/'hubert_base';hubert.mkdir()
+ (hubert/'config.json').write_text('{}')
+ (hubert/'preprocessor_config.json').write_text('{}')
+ (hubert/'pytorch_model.bin').write_bytes(b'hubert')
+ resolved_rmvpe,resolved_hubert=resolve_support_assets(tmp_path)
+ assert resolved_rmvpe==rmvpe and resolved_hubert==hubert
 
 def test_native_dsp():
  x=np.sin(np.arange(4800)*2*np.pi*220/48000).astype('float32')*.2
