@@ -47,5 +47,21 @@ int main()
         voice.getMagnitude(1, voice.getNumSamples()) != 0.0f)
         return 4;
 
+    // Late converted samples must still be played in FIFO order after the neural buffer.
+    auto fifo = std::make_unique<VocalMorphProcessor>();
+    fifo->prepareToPlay(48000.0, 30720);
+    fifo->setNeuralMode(true);
+    juce::AudioBuffer<float> preroll(2, 30720);
+    preroll.clear();
+    fifo->processBlock(preroll, midi);
+    auto generation = fifo->worker.generation.load();
+    for (int i = 0; i < 512; ++i)
+        fifo->worker.output.push({0.2f, 0, generation});
+    juce::AudioBuffer<float> converted(2, 512);
+    converted.clear();
+    fifo->processBlock(converted, midi);
+    if (converted.getMagnitude(0, converted.getNumSamples()) <= 0.0f)
+        return 5;
+
     return 0;
 }
